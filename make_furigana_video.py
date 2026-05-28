@@ -2,65 +2,49 @@ from pathlib import Path
 import argparse
 import re
 import subprocess
+import json
 
 import pysubs2
 from fugashi import Tagger
 
 
-# ---------------- CONFIG ----------------
-
-FONT_NAME = "Yu Gothic"
-MAIN_FONT_SIZE = 48
-FURIGANA_FONT_SIZE = 24
-
-# Top-center subtitles
-MAIN_MARGIN_V = 95
-FURIGANA_MARGIN_V = 55
-
-SHOW_FURIGANA = True
-
-OUTPUT_ASS_NAME = "captions_furigana.ass"
-OUTPUT_VIDEO_SUFFIX = "_furigana"
-VIDEO_WIDTH = 1920
-VIDEO_HEIGHT = 1080
-
-SUBTITLE_Y = 135
-FURIGANA_Y = 92
-
-PX_PER_JA_CHAR = 54
-TOKEN_GAP = 12
-
-# ----------------------------------------
-
+DEFAULT_CONFIG = {
+    "font_name": "Yu Gothic",
+    "main_font_size": 48,
+    "furigana_font_size": 24,
+    "show_furigana": True,
+    "output_ass_name": "captions_furigana.ass",
+    "output_video_suffix": "_furigana",
+    "video_width": 1920,
+    "video_height": 1080,
+    "subtitle_y": 135,
+    "furigana_y": 92,
+    "px_per_ja_char": 50,
+    "token_gap": 2
+}
 
 KANJI_RE = re.compile(r"[\u4E00-\u9FFF]")
+
+
+def load_config(config_path: Path) -> dict:
+    config = DEFAULT_CONFIG.copy()
+
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
+            user_config = json.load(f)
+        config.update(user_config)
+    else:
+        print(f"Config not found: {config_path}. Using defaults.")
+
+    return config
+
 
 def text_units(text: str) -> float:
     units = 0
     for ch in text:
-        if ord(ch) < 128:
-            units += 0.5
-        else:
-            units += 1
+        units += 0.5 if ord(ch) < 128 else 1
     return units
 
-
-def tokenize_for_ruby(text: str, tagger: Tagger):
-    tokens = []
-
-    clean_text = " ".join(line.strip() for line in text.splitlines() if line.strip())
-
-    for word in tagger(clean_text):
-        surface = word.surface
-        reading = get_reading(word)
-
-        tokens.append({
-            "surface": ass_escape(surface),
-            "reading": ass_escape(reading) if has_kanji(surface) and reading else "",
-            "units": text_units(surface),
-        })
-
-    return tokens
 
 def has_kanji(text: str) -> bool:
     return bool(KANJI_RE.search(text))
@@ -98,35 +82,30 @@ def get_reading(word) -> str:
     return ""
 
 
-def make_furigana_line(text: str, tagger: Tagger) -> str:
-    parts = []
+def tokenize_for_ruby(text: str, tagger: Tagger):
+    tokens = []
+    clean_text = " ".join(line.strip() for line in text.splitlines() if line.strip())
 
-    for word in tagger(text):
+    for word in tagger(clean_text):
         surface = word.surface
         reading = get_reading(word)
 
-        if has_kanji(surface) and reading:
-            parts.append(reading)
-        else:
-            # Rough spacing placeholder.
-            # This is not perfect ruby alignment yet, but it keeps the MVP readable.
-            parts.append("　" * max(1, len(surface)))
+        tokens.append({
+            "surface": ass_escape(surface),
+            "reading": ass_escape(reading) if has_kanji(surface) and reading else "",
+            "units": text_units(surface),
+        })
 
-    return ass_escape(" ".join(parts)).strip()
-
-
-def make_main_line(text: str) -> str:
-    text = " ".join(line.strip() for line in text.splitlines() if line.strip())
-    return ass_escape(text)
+    return tokens
 
 
-def build_ass_from_srt(srt_path: Path, ass_path: Path) -> None:
+def build_ass_from_srt(srt_path: Path, ass_path: Path, config: dict) -> None:
     tagger = Tagger()
     subs = pysubs2.load(str(srt_path), encoding="utf-8")
 
     out = pysubs2.SSAFile()
-    out.info["PlayResX"] = str(VIDEO_WIDTH)
-    out.info["PlayResY"] = str(VIDEO_HEIGHT)
+    out.info["PlayResX"] = str(config["video_width"])
+    out.info["PlayResY"] = str(config["video_height"])
     out.info["WrapStyle"] = "0"
     out.info["ScaledBorderAndShadow"] = "yes"
 
@@ -134,44 +113,84 @@ def build_ass_from_srt(srt_path: Path, ass_path: Path) -> None:
     white = pysubs2.Color(255, 255, 255, 0)
 
     out.styles["Main"] = pysubs2.SSAStyle(
-        fontname=FONT_NAME,
-        fontsize=MAIN_FONT_SIZE,
+        fontname=config["font_name"],
+        fontsize=config["main_font_size"],
         primarycolor=black,
         outlinecolor=white,
-        backcolor=white,
+        backcolor=pysubs2.Color(255, 255, 255, 80),
         shadow=0,
-        outline=4,
-        borderstyle=1,
+        outline=0,
+        borderstyle=3,
         alignment=5,
     )
 
     out.styles["Furigana"] = pysubs2.SSAStyle(
-        fontname=FONT_NAME,
-        fontsize=FURIGANA_FONT_SIZE,
+        fontname=config["font_name"],
+        fontsize=config["furigana_font_size"],
         primarycolor=black,
         outlinecolor=white,
-        backcolor=white,
+        backcolor=pysubs2.Color(255, 255, 255, 80),
         shadow=0,
-        outline=3,
-        borderstyle=1,
+        outline=0,
+        borderstyle=3,
         alignment=5,
+    )
+    out.styles["Box"] = pysubs2.SSAStyle(
+        fontname="Arial",
+        fontsize=1,
+        primarycolor=pysubs2.Color(255, 255, 255, 0),
+        outlinecolor=pysubs2.Color(255, 255, 255, 0),
+        backcolor=pysubs2.Color(255, 255, 255, 0),
+        shadow=0,
+        outline=0,
+        borderstyle=1,
+        alignment=7,
     )
 
     for event in subs:
         tokens = tokenize_for_ruby(event.text, tagger)
 
         total_units = sum(t["units"] for t in tokens)
-        total_width = total_units * PX_PER_JA_CHAR + max(0, len(tokens) - 1) * TOKEN_GAP
+        total_width = (
+            total_units * config["px_per_ja_char"]
+            + max(0, len(tokens) - 1) * config["token_gap"]
+        )
 
-        x = (VIDEO_WIDTH - total_width) / 2
+        box_padding_x = config.get("box_padding_x", 45)
+        box_height = config.get("box_height", 120)
+        box_y = config.get("box_y", 52)
+
+        box_width = int(total_width + box_padding_x * 2)
+        box_x = int((config["video_width"] - box_width) / 2)
+
+        box_text = r"{\p1\alpha&H80&\pos(%d,%d)}m 0 0 l %d 0 l %d %d l 0 %d{\p0}" % (
+            box_x,
+            box_y,
+            box_width,
+            box_width,
+            box_height,
+            box_height,
+        )
+
+        out.events.append(
+            pysubs2.SSAEvent(
+                start=event.start,
+                end=event.end,
+                text=box_text,
+                style="Box",
+                layer=0,
+            )
+        )
+
+        x = (config["video_width"] - total_width) / 2
 
         for token in tokens:
-            token_width = token["units"] * PX_PER_JA_CHAR
+            token_width = token["units"] * config["px_per_ja_char"]
             token_center_x = x + token_width / 2
 
             main_text = r"{\pos(%d,%d)}%s" % (
                 int(token_center_x),
-                SUBTITLE_Y,
+                config["subtitle_y"],
                 token["surface"],
             )
 
@@ -181,13 +200,14 @@ def build_ass_from_srt(srt_path: Path, ass_path: Path) -> None:
                     end=event.end,
                     text=main_text,
                     style="Main",
+                    layer=1,
                 )
             )
 
-            if SHOW_FURIGANA and token["reading"]:
+            if config["show_furigana"] and token["reading"]:
                 furigana_text = r"{\pos(%d,%d)}%s" % (
                     int(token_center_x),
-                    FURIGANA_Y,
+                    config["furigana_y"],
                     token["reading"],
                 )
 
@@ -197,17 +217,16 @@ def build_ass_from_srt(srt_path: Path, ass_path: Path) -> None:
                         end=event.end,
                         text=furigana_text,
                         style="Furigana",
+                        layer=1,
                     )
                 )
 
-            x += token_width + TOKEN_GAP
+            x += token_width + config["token_gap"]
 
     out.save(str(ass_path), encoding="utf-8")
 
 
 def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path) -> None:
-    # Windows-friendly trick:
-    # Run FFmpeg from the ASS file's folder so the ass filter only receives a simple filename.
     cmd = [
         "ffmpeg",
         "-y",
@@ -225,13 +244,15 @@ def burn_subtitles(video_path: Path, ass_path: Path, output_path: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("video", help="Input MP4 file")
+    parser.add_argument("video", help="Input MP4/MKV file")
     parser.add_argument("srt", help="Input Japanese SRT file")
-    parser.add_argument("--out", help="Output MP4 file", default=None)
+    parser.add_argument("--out", help="Output video file", default=None)
+    parser.add_argument("--config", help="Config JSON file", default="config.json")
     args = parser.parse_args()
 
     video_path = Path(args.video)
     srt_path = Path(args.srt)
+    config = load_config(Path(args.config))
 
     if not video_path.exists():
         raise FileNotFoundError(video_path)
@@ -239,17 +260,17 @@ def main():
     if not srt_path.exists():
         raise FileNotFoundError(srt_path)
 
-    ass_path = srt_path.with_name(OUTPUT_ASS_NAME)
+    ass_path = srt_path.with_name(config["output_ass_name"])
 
     if args.out:
         output_path = Path(args.out)
     else:
         output_path = video_path.with_name(
-            video_path.stem + OUTPUT_VIDEO_SUFFIX + video_path.suffix
+            video_path.stem + config["output_video_suffix"] + video_path.suffix
         )
 
     print("Creating ASS subtitles...")
-    build_ass_from_srt(srt_path, ass_path)
+    build_ass_from_srt(srt_path, ass_path, config)
 
     print("Burning subtitles into video...")
     burn_subtitles(video_path, ass_path, output_path)

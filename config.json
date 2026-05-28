@@ -1,0 +1,21 @@
+{
+  "font_name": "Yu Gothic",
+  "main_font_size": 48,
+  "furigana_font_size": 28,
+  "subtitle_y": 135,
+  "furigana_y": 92,
+  "show_furigana": true,
+
+  "px_per_ja_char": 50,
+  "token_gap": -16,
+
+  "video_width": 1920,
+  "video_height": 1080,
+
+  "output_ass_name": "captions_furigana.ass",
+  "output_video_suffix": "_furigana",
+
+  "box_padding_x": 32,
+  "box_height": 120,
+  "box_y": 52
+}
