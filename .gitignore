@@ -4,19 +4,26 @@ __pycache__/
 
 # Virtual environment
 .venv/
-venv/
 
-# Generated subtitle/video outputs
-*.ass
-*_furigana.mp4
-*_furigana.mkv
-
-# OS/editor
-.DS_Store
-Thumbs.db
-.vscode/
-
-# Python build stuff
+# Build outputs
 build/
 dist/
-*.egg-info/
+*.spec
+
+# Video files
+*.mp4
+*.mkv
+*.mov
+
+# Generated subtitles
+*.ass
+
+# Temp files
+temp/
+
+# VSCode
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
