@@ -1,13 +1,26 @@
 {
   "font_name": "Yu Gothic",
-  "main_font_size": 48,
-  "furigana_font_size": 28,
+  "main_font_size": 64,
+  "furigana_font_size": 40,
+  "token_gap": 4,
+
+  "text_color": "#FFFFFF",
+  "text_outline_color": "#000000",
+  "text_outline_size": 3,
+
+  "furigana_color": "#FFFFFF",
+  "furigana_outline_color": "#000000",
+  "furigana_outline_size": 2,
+
+  "box_enabled": false,
+  "box_color": "#111111",
+  "box_opacity": 128,
+
   "subtitle_y": 135,
   "furigana_y": 92,
   "show_furigana": true,
 
   "px_per_ja_char": 50,
-  "token_gap": -16,
 
   "video_width": 1920,
   "video_height": 1080,
